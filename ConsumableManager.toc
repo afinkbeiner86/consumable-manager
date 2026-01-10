@@ -1,0 +1,9 @@
+## Interface: 30300
+## Title: ConsumableManager
+## Notes: Dynamically manages buttons with keybinds for food, drinks, and potions
+## Author: Achim Finkbeiner
+## Version: 2.7.0
+## SavedVariables: ConsumableManagerDB
+
+Data.lua
+ConsumableManager.lua

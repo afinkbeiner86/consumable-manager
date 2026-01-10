@@ -1,0 +1,6 @@
+<Bindings>
+    <Binding name="CLICK CMFoodButton:LeftButton" header="CONSUMABLEMANAGER"/>
+    <Binding name="CLICK CMDrinkButton:LeftButton"/>
+    <Binding name="CLICK CMHealthButton:LeftButton"/>
+    <Binding name="CLICK CMManaButton:LeftButton"/>
+</Bindings>

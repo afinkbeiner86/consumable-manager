@@ -1,0 +1,15 @@
+# WoW temporary files
+*.bak
+*.old
+
+# Interface local settings (if you copy your live folder)
+/Logs/
+/Screenshots/
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# VS Code or Editor settings
+.vscode/
+.idea/
