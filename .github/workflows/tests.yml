@@ -1,0 +1,28 @@
+name: Unit Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lua 5.1
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.1 luarocks
+
+      - name: Install test tools
+        run: |
+          sudo luarocks install busted
+          sudo luarocks install luacheck
+
+      - name: Run Luacheck
+        run: luacheck ConsumableManager.lua Data.lua tests
+
+      - name: Run Tests
+        run: busted -v tests/test_consumable_manager.lua

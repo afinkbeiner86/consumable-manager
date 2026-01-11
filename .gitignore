@@ -2,7 +2,7 @@
 *.bak
 *.old
 
-# Interface local settings (if you copy your live folder)
+# Interface local settings
 /Logs/
 /Screenshots/
 

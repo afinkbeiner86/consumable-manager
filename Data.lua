@@ -1,3 +1,4 @@
+-- luacheck: ignore 211
 local addonName, AddonNamespace = ...
 
 --[[ Known Consumables Database (WoW 3.3.5 - WotLK)

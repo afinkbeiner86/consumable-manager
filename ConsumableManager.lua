@@ -158,9 +158,7 @@ local function UpdateConsumableDisplay()
                 local itemId = tonumber(itemLink:match("item:(%d+)"))
 
                 -- Safety check for itemId extraction
-                if not itemId then
-                    -- Skip this item if we can't parse the ID
-                else
+                if itemId then
                     foundItems[itemId] = true
 
                     -- Check known consumables database first
@@ -436,7 +434,7 @@ local function InitializeButtons()
             end
         end)
 
-        btn:SetScript("OnLeave", function(self)
+        btn:SetScript("OnLeave", function(_)
             GameTooltip:Hide()
         end)
 
@@ -556,7 +554,7 @@ SlashCmdList.CM = function(input)
 end
 
 --------------------------------------------------------------------------------
--- 5. Event Handling & Update Dispatcher
+-- Event Handling & Update Dispatcher
 --------------------------------------------------------------------------------
 
 EventFrame:RegisterEvent("ADDON_LOADED")
@@ -565,7 +563,7 @@ EventFrame:RegisterEvent("UPDATE_BINDINGS")
 EventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 EventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
 
-EventFrame:SetScript("OnEvent", function(self, event, arg1)
+EventFrame:SetScript("OnEvent", function(_, event, arg1)
     if event == "ADDON_LOADED" and arg1 == addonName then
         -- Slight delay to ensure SavedVariables are fully loaded
         C_Timer.After(0.1, function()
