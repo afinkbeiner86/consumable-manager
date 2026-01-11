@@ -80,14 +80,6 @@ on:
       - main      # Only from main branch
 ```
 
-### What gets released
-
-Only these 4 files in the ZIP:
-- `Bindings.xml`
-- `ConsumableManager.lua`
-- `ConsumableManager.toc`
-- `Data.lua`
-
 ## Troubleshooting
 
 ### Release didn't trigger
