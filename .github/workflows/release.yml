@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+    branches:
+      - main  # Only trigger on main branch
+
+jobs:
+  release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    
+    # Double-check we're on main branch
+    if: github.ref_name == 'main' || startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: main  # Ensure we're on main
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION"
+      
+      - name: Update version in files
+        run: python scripts/bump-version.py ${{ steps.version.outputs.version }}
+      
+      - name: Create release ZIP
+        run: |
+          mkdir -p release/ConsumableManager
+          cp Bindings.xml ConsumableManager.lua ConsumableManager.toc Data.lua release/ConsumableManager/
+          cd release
+          zip -r ConsumableManager-${{ steps.version.outputs.version }}.zip ConsumableManager/
+      
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release/ConsumableManager-${{ steps.version.outputs.version }}.zip
+          body: |
+            ## ConsumableManager v${{ steps.version.outputs.version }}
+            
+            ### Installation
+            1. Download `ConsumableManager-${{ steps.version.outputs.version }}.zip`
+            2. Extract to `World of Warcraft/Interface/AddOns/`
+            3. Restart WoW or `/reload`
+            
+            ### Files Included
+            - Bindings.xml
+            - ConsumableManager.lua
+            - ConsumableManager.toc
+            - Data.lua
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
