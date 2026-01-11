@@ -1,6 +1,6 @@
 --------------------------------------------------------------------------------
 -- ConsumableManager
--- Version: 2.7.0
+-- Version: 2.8.0
 -- Purpose: Automatically identifies and buttons the best Food, Drink, and Potions in bags.
 -- Author: Achim Finkbeiner
 --
@@ -11,6 +11,22 @@
 local addonName, AddonNamespace = ...
 local KNOWN_CONSUMABLES = AddonNamespace.KNOWN_CONSUMABLES
 local EventFrame = CreateFrame("Frame", addonName)
+
+-- Cache frequently used API calls for performance
+local GetTime = GetTime
+local InCombatLockdown = InCombatLockdown
+local GetContainerNumSlots = GetContainerNumSlots
+local GetContainerItemLink = GetContainerItemLink
+local GetContainerItemInfo = GetContainerItemInfo
+local GetItemInfo = GetItemInfo
+local GetItemCooldown = GetItemCooldown
+local UnitLevel = UnitLevel
+local GetBindingKey = GetBindingKey
+
+-- Configuration constants
+local SCAN_THROTTLE = 0.5
+local CACHE_MAX_SIZE = 500
+local INIT_DELAY = 0.1
 
 --[[ Global Binding Strings
      These allow the WoW Keybindings menu to display readable names for our actions.
@@ -58,11 +74,21 @@ local BIND_ABBREV = {
 }
 
 --------------------------------------------------------------------------------
+-- Forward Declarations
+--------------------------------------------------------------------------------
+local RefreshLockState
+local RefreshButtonPositions
+local UpdateConsumableDisplay
+local CreateConfigMenu
+local InitializeButtons
+local DisplayAddonStatus
+
+--------------------------------------------------------------------------------
 -- Movement & Locking Helpers
 --------------------------------------------------------------------------------
 
 --- Updates the interactivity of frames based on the current Lock status.
-local function RefreshLockState()
+RefreshLockState = function()
     if not ConsumableManagerDB then return end
 
     local isLocked = ConsumableManagerDB.isLocked
@@ -83,7 +109,7 @@ local function RefreshLockState()
 end
 
 --- Handles the visual arrangement of buttons (Grouped or Individual).
-local function RefreshButtonPositions()
+RefreshButtonPositions = function()
     if not ConsumableManagerDB or not CONSUMABLE_TYPES.Food.button then return end
 
     local buttonSize, padding = 36, 6
@@ -123,7 +149,7 @@ end
 --------------------------------------------------------------------------------
 
 --- Scans bags for the highest-level consumables and updates button attributes.
-local function UpdateConsumableDisplay()
+UpdateConsumableDisplay = function()
     -- Combat Guard: Secure attributes cannot be changed while in combat
     if not CONSUMABLE_TYPES.Food.button or InCombatLockdown() then
         if InCombatLockdown() then
@@ -133,23 +159,26 @@ local function UpdateConsumableDisplay()
     end
 
     -- Throttle updates
-    if (GetTime() - lastScanTime) < 0.5 then
+    local currentTime = GetTime()
+    if (currentTime - lastScanTime) < SCAN_THROTTLE then
         isUpdatePending = true
         return
     end
 
-    lastScanTime, isUpdatePending = GetTime(), false
+    lastScanTime, isUpdatePending = currentTime, false
 
+    -- Initialize best items tracking
     local bestItemsFound = {}
     for typeKey in pairs(CONSUMABLE_TYPES) do
-        bestItemsFound[typeKey] = { level = -1, id = 0 }
+        bestItemsFound[typeKey] = { level = -1, id = 0, count = 0 }
     end
 
     -- Track items found in bags for cache pruning
     local foundItems = {}
-    local playerLevel = UnitLevel("player") -- Cache player level for the loop
+    local playerLevel = UnitLevel("player")
+    local cacheSize = 0
 
-    -- Loop through all bags (0-4) and slots
+    -- Single pass through all bags (0-4) and slots
     for bag = 0, 4 do
         local numSlots = GetContainerNumSlots(bag)
         for slot = 1, numSlots do
@@ -161,7 +190,7 @@ local function UpdateConsumableDisplay()
                 if itemId then
                     foundItems[itemId] = true
 
-                    -- Check known consumables database first
+                    -- Check known consumables database first (fastest path)
                     local assignedType = KNOWN_CONSUMABLES[itemId]
 
                     -- If not in known database, check cache
@@ -171,51 +200,63 @@ local function UpdateConsumableDisplay()
 
                     -- If still unknown, scan tooltip
                     if not assignedType then
-                        ItemTypeCache[itemId] = "NONE"
                         TooltipScanner:ClearLines()
                         TooltipScanner:SetBagItem(bag, slot)
+
+                        local foundMatch = false
                         for i = 1, TooltipScanner:NumLines() do
                             local lineText = _G["CMScannerTextLeft" .. i]:GetText()
                             if lineText then
                                 for typeKey, typeData in pairs(CONSUMABLE_TYPES) do
-                                    -- Match the pattern (e.g., 'Restores health') and check for exclusions
-                                    if lineText:match(typeData.pattern) and not (typeData.exclude and lineText:match(typeData.exclude)) then
-                                        ItemTypeCache[itemId] = typeKey
-                                        assignedType = typeKey
-                                        break
+                                    -- Check pattern match first (most common case)
+                                    if lineText:match(typeData.pattern) then
+                                        -- Only check exclusion if pattern matched
+                                        if not typeData.exclude or not lineText:match(typeData.exclude) then
+                                            ItemTypeCache[itemId] = typeKey
+                                            assignedType = typeKey
+                                            foundMatch = true
+                                            break
+                                        end
                                     end
                                 end
+                                if foundMatch then break end
                             end
+                        end
+
+                        -- Mark as scanned even if no match found
+                        if not foundMatch then
+                            ItemTypeCache[itemId] = "NONE"
                         end
                     end
 
                     -- Compare this item against the "Best" found so far for its category
                     if assignedType and assignedType ~= "NONE" then
                         local _, itemCount = GetContainerItemInfo(bag, slot)
-                        -- Get itemMinLevel to check usage requirements
-                        local _, _, _, itemLvl, itemMinLevel = GetItemInfo(itemLink)
+
+                        -- Single GetItemInfo call - get everything we need at once
+                        local itemName, _, _, itemLvl, itemMinLevel, _, _, _, _, itemTexture = GetItemInfo(itemLink)
 
                         -- Safety checks
                         itemLvl = itemLvl or 0
                         itemMinLevel = itemMinLevel or 0
+                        itemCount = itemCount or 1
 
                         -- Proceed if player level meets item requirement
                         if playerLevel >= itemMinLevel then
-                            if itemLvl > bestItemsFound[assignedType].level then
-                                -- Only get full item info for items that beat the current best
-                                local itemName, _, _, _, _, _, _, _, _, itemTexture = GetItemInfo(itemLink)
-                                bestItemsFound[assignedType] = {
-                                    level = itemLvl,
-                                    id = itemId,
-                                    name = itemName,
-                                    texture = itemTexture,
-                                    bag = bag,
-                                    slot = slot,
-                                    count = itemCount or 1
-                                }
-                            elseif itemLvl == bestItemsFound[assignedType].level and itemId == bestItemsFound[assignedType].id then
-                                bestItemsFound[assignedType].count = bestItemsFound[assignedType].count +
-                                    (itemCount or 1)
+                            local currentBest = bestItemsFound[assignedType]
+
+                            if itemLvl > currentBest.level then
+                                -- New best item found
+                                currentBest.level = itemLvl
+                                currentBest.id = itemId
+                                currentBest.name = itemName
+                                currentBest.texture = itemTexture
+                                currentBest.bag = bag
+                                currentBest.slot = slot
+                                currentBest.count = itemCount
+                            elseif itemLvl == currentBest.level and itemId == currentBest.id then
+                                -- Same item in different stack - add to count
+                                currentBest.count = currentBest.count + itemCount
                             end
                         end
                     end
@@ -228,13 +269,22 @@ local function UpdateConsumableDisplay()
     for itemId in pairs(ItemTypeCache) do
         if not foundItems[itemId] then
             ItemTypeCache[itemId] = nil
+        else
+            cacheSize = cacheSize + 1
         end
+    end
+
+    -- Emergency cache cleanup if it grows too large
+    if cacheSize > CACHE_MAX_SIZE then
+        ItemTypeCache = {}
     end
 
     -- Update Secure Attributes and Visuals
     for typeKey, typeData in pairs(CONSUMABLE_TYPES) do
-        local btn, itemData = typeData.button, bestItemsFound[typeKey]
+        local btn = typeData.button
         if btn then
+            local itemData = bestItemsFound[typeKey]
+
             if itemData.name then
                 -- Apply the actual item usage logic
                 btn.icon:SetTexture(itemData.texture)
@@ -281,7 +331,7 @@ end
 -- Configuration Panel (GUI)
 --------------------------------------------------------------------------------
 
-local function CreateConfigMenu()
+CreateConfigMenu = function()
     -- Create a panel for the Interface Options
     local panel = CreateFrame("Frame", "ConsumableManagerConfigPanel", UIParent)
     panel.name = "Consumable Manager"
@@ -376,7 +426,7 @@ end
 --------------------------------------------------------------------------------
 
 --- Creates the Secure Buttons and sets up their appearance/scripts.
-local function InitializeButtons()
+InitializeButtons = function()
     -- Ensure SavedVariables table exists with defaults
     if not ConsumableManagerDB or type(ConsumableManagerDB) ~= "table" or next(ConsumableManagerDB) == nil then
         ConsumableManagerDB = {
@@ -472,10 +522,10 @@ end
 -- Help, Status & Commands
 --------------------------------------------------------------------------------
 
-local function DisplayAddonStatus()
+DisplayAddonStatus = function()
     local function HexColor(text, hex) return "|cff" .. hex .. text .. "|r" end
     local title = HexColor("Consumable Manager", "00ff00")
-    local version = HexColor("v2.7.0", "888888")
+    local version = HexColor("v2.8.0", "888888")
 
     print("--------------------------------------------------")
     print(title .. " " .. version)
@@ -566,7 +616,7 @@ EventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
 EventFrame:SetScript("OnEvent", function(_, event, arg1)
     if event == "ADDON_LOADED" and arg1 == addonName then
         -- Slight delay to ensure SavedVariables are fully loaded
-        C_Timer.After(0.1, function()
+        C_Timer.After(INIT_DELAY, function()
             InitializeButtons()
             UpdateConsumableDisplay()
         end)
