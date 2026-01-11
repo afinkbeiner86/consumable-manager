@@ -3,17 +3,15 @@ name: Release
 on:
   push:
     tags:
-      - 'v*.*.*'
-    branches:
-      - main  # Only trigger on main branch
+      - 'v*.*.*'  # Only trigger on version tags
 
 jobs:
   release:
     name: Build and Release
     runs-on: ubuntu-latest
     
-    # Double-check we're on main branch
-    if: github.ref_name == 'main' || startsWith(github.ref, 'refs/tags/')
+    # Only run if triggered by a tag
+    if: startsWith(github.ref, 'refs/tags/')
     
     steps:
       - name: Checkout code
@@ -54,6 +52,8 @@ jobs:
             1. Download `ConsumableManager-${{ steps.version.outputs.version }}.zip`
             2. Extract to `World of Warcraft/Interface/AddOns/`
             3. Restart WoW or `/reload`
+            
+            The ZIP contains a `ConsumableManager` folder ready to use.
             
             ### Files Included
             - Bindings.xml
