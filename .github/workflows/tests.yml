@@ -25,4 +25,4 @@ jobs:
         run: luacheck ConsumableManager.lua Data.lua tests
 
       - name: Run Tests
-        run: busted -v tests/test_consumable_manager.lua
+        run: busted -o gtest tests/test_consumable_manager.lua

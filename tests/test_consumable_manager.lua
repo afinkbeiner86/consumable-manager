@@ -1,4 +1,4 @@
--- luacheck: globals LoadAddonFile describe it setup before_each
+-- luacheck: globals LoadAddonFile describe it setup teardown before_each
 --[[
     ConsumableManager Test Suite
     ----------------------------
@@ -36,6 +36,19 @@ describe("ConsumableManager Addon", function()
             isVisible = true,
             version = 1
         }
+
+        -- Mute Addon Chat Output: Overwrite print to prevent
+        -- WoW color strings from cluttering the CI logs.
+        _G.oldPrint = print
+        _G.print = function() end
+    end)
+
+    --[[
+        Teardown: Runs after every 'it' block.
+        Restores the original print function to avoid side effects.
+    ]]
+    teardown(function()
+        _G.print = _G.oldPrint
     end)
 
     describe("Static Data Integrity", function()
