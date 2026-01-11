@@ -1,4 +1,4 @@
-# ConsumableManager (v2.7.0)
+# ConsumableManager
 
 **ConsumableManager** is a lightweight World of Warcraft (WotLK 3.3.5) addon designed to simplify the management of food, water, and potions. It automatically scans your bags to find the "best" available consumables based on your level and assigns them to secure action buttons.
 
