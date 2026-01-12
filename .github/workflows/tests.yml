@@ -31,6 +31,12 @@ jobs:
   python-tests:
     name: Python Tests
     runs-on: ubuntu-latest
+    env:
+      CI: true
+
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
 
     steps:
       - uses: actions/checkout@v4
@@ -38,7 +44,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: ${{ matrix.python-version }}
 
       - name: Run bump-version tests
         run: python -m unittest tests/test_bump_version.py -v
@@ -46,7 +52,7 @@ jobs:
       - name: Test bump-version script syntax
         run: python -m py_compile scripts/bump-version.py
 
-      - name: Validate version format
+      - name: Smoke test bump-version script
         run: |
-          # Test that the script runs with --help would work (basic smoke test)
-          python scripts/bump-version.py 1.0.0 || echo "Expected to fail without files, that's ok for syntax check"
+          python scripts/bump-version.py 1.0.0 || \
+            echo "Expected failure due to missing files"
