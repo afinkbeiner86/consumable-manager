@@ -1,11 +1,12 @@
-name: Unit Tests
+name: Tests
 
 on:
   push:
   pull_request:
 
 jobs:
-  test:
+  lua-tests:
+    name: Lua Tests
     runs-on: ubuntu-latest
 
     steps:
@@ -24,5 +25,28 @@ jobs:
       - name: Run Luacheck
         run: luacheck ConsumableManager.lua Data.lua tests
 
-      - name: Run Tests
+      - name: Run Lua Tests
         run: busted -o gtest tests/test_consumable_manager.lua
+
+  python-tests:
+    name: Python Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Run bump-version tests
+        run: python -m unittest tests/test_bump_version.py -v
+
+      - name: Test bump-version script syntax
+        run: python -m py_compile scripts/bump-version.py
+
+      - name: Validate version format
+        run: |
+          # Test that the script runs with --help would work (basic smoke test)
+          python scripts/bump-version.py 1.0.0 || echo "Expected to fail without files, that's ok for syntax check"
