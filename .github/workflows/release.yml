@@ -52,14 +52,6 @@ jobs:
             1. Download `ConsumableManager-${{ steps.version.outputs.version }}.zip`
             2. Extract to `World of Warcraft/Interface/AddOns/`
             3. Restart WoW or `/reload`
-            
-            The ZIP contains a `ConsumableManager` folder ready to use.
-            
-            ### Files Included
-            - Bindings.xml
-            - ConsumableManager.lua
-            - ConsumableManager.toc
-            - Data.lua
           draft: false
           prerelease: false
         env:
