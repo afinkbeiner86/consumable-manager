@@ -52,7 +52,9 @@ jobs:
       - name: Test bump-version script syntax
         run: python -m py_compile scripts/bump-version.py
 
-      - name: Smoke test bump-version script
+      - name: Smoke test bump-version script (no files)
         run: |
-          python scripts/bump-version.py 1.0.0 || \
+          tmpdir=$(mktemp -d)
+          cd "$tmpdir"
+          python "$GITHUB_WORKSPACE/scripts/bump-version.py" 1.0.0 || \
             echo "Expected failure due to missing files"
