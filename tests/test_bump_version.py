@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
+"""
+Unit tests for bump-version.py
+"""
+
 import importlib.util
+import os
 import sys
 import tempfile
 import unittest
@@ -10,6 +15,8 @@ SCRIPT_PATH = BASE_DIR / "scripts" / "bump-version.py"
 
 spec = importlib.util.spec_from_file_location("bump_version", str(SCRIPT_PATH))
 bump_version = importlib.util.module_from_spec(spec)
+# Assigning spec to the module is required for importlib.reload() to work
+bump_version.__spec__ = spec
 sys.modules["bump_version"] = bump_version
 spec.loader.exec_module(bump_version)
 
@@ -18,16 +25,14 @@ class BaseBumpTest(unittest.TestCase):
     """Shared environment setup for file-based tests."""
 
     def setUp(self):
+        """Create temporary directory and switch CWD"""
         self.tmp_dir = tempfile.TemporaryDirectory()
         self.test_path = Path(self.tmp_dir.name)
         self.original_cwd = Path.cwd()
-        import os
-
         os.chdir(self.test_path)
 
     def tearDown(self):
-        import os
-
+        """Restore CWD and cleanup temp files"""
         os.chdir(self.original_cwd)
         self.tmp_dir.cleanup()
 
@@ -42,10 +47,13 @@ class BaseBumpTest(unittest.TestCase):
 
 
 class TestVersionValidation(unittest.TestCase):
+    """Test version format validation"""
+
     def test_validation(self):
+        """Test that valid and invalid semantic versions are handled"""
         cases = [
             ("1.0.0", True),
-            ("0.0.1", True),
+            ("2.9.0", True),
             ("1.0", False),
             ("v1.0.0", False),
             ("", False),
@@ -56,6 +64,8 @@ class TestVersionValidation(unittest.TestCase):
 
 
 class TestBumpLogic(BaseBumpTest):
+    """Test the core version bumping functionality"""
+
     def test_successful_bump(self):
         """Test happy path: reading current and updating to new version."""
         self.create_mock_project("2.8.0")
@@ -75,12 +85,14 @@ class TestBumpLogic(BaseBumpTest):
 
 
 class TestCIEnvironment(unittest.TestCase):
+    """Test behavior in CI environment"""
+
     def test_colors_disabled_in_ci(self):
         """Verify reload() functionality with registered sys.modules."""
         import importlib
-        import os
 
         os.environ["CI"] = "true"
+        # Reloading now works because __spec__ was assigned during import
         importlib.reload(bump_version)
         try:
             self.assertEqual(bump_version.Colors.RED, "")
