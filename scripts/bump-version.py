@@ -10,9 +10,11 @@ Exit codes:
   2 - File operation error
 """
 
+import logging
 import os
 import re
 import sys
+from pathlib import Path
 
 
 # ANSI color codes (disabled in CI)
@@ -28,6 +30,14 @@ if os.getenv("CI") or os.getenv("GITHUB_ACTIONS"):
     Colors.RED = Colors.GREEN = Colors.YELLOW = Colors.NC = ""
 
 
+# Logging setup
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(message)s",
+)
+log = logging.getLogger(__name__)
+
+
 def validate_version(version: str) -> bool:
     """Validate semantic versioning format (X.Y.Z)"""
     return bool(re.match(r"^\d+\.\d+\.\d+$", version))
@@ -35,32 +45,37 @@ def validate_version(version: str) -> bool:
 
 def get_current_version() -> str:
     """Get current version from .toc file"""
+    toc_path = Path("ConsumableManager.toc")
+
+    if not toc_path.exists():
+        log.error(f"{Colors.RED}Error: ConsumableManager.toc not found{Colors.NC}")
+        return "unknown"
+
     try:
-        with open("ConsumableManager.toc", "r") as f:
-            for line in f:
-                if line.startswith("## Version:"):
-                    return line.split(":", 1)[1].strip()
-    except FileNotFoundError:
-        print(f"{Colors.RED}Error: ConsumableManager.toc not found{Colors.NC}")
-        return "unknown"
+        content = toc_path.read_text(encoding="utf-8")
+        for line in content.splitlines():
+            if line.startswith("## Version:"):
+                return line.split(":", 1)[1].strip()
     except Exception as e:
-        print(f"{Colors.RED}Error reading version: {e}{Colors.NC}")
+        log.error(f"{Colors.RED}Error reading version: {e}{Colors.NC}")
         return "unknown"
+
     return "unknown"
 
 
 def update_file(filepath: str, old_content: str, new_content: str) -> bool:
     """Update file content and return success status"""
+    path = Path(filepath)
+
     if old_content == new_content:
-        print(f"{Colors.YELLOW}ℹ{Colors.NC}  No changes needed: {filepath}")
+        log.warning(f"{Colors.YELLOW}ℹ{Colors.NC}  No changes needed: {path.name}")
         return True
 
     try:
-        with open(filepath, "w", encoding="utf-8") as f:
-            f.write(new_content)
+        path.write_text(new_content, encoding="utf-8")
         return True
     except Exception as e:
-        print(f"{Colors.RED}✗{Colors.NC} Error updating {filepath}: {e}")
+        log.error(f"{Colors.RED}✗{Colors.NC} Error updating {path.name}: {e}")
         return False
 
 
@@ -70,20 +85,22 @@ def bump_version(new_version: str) -> int:
     Returns: 0 on success, 2 on error
     """
 
-    print(f"{Colors.YELLOW}Bumping version to: {Colors.GREEN}{new_version}{Colors.NC}")
+    log.info(
+        f"{Colors.YELLOW}Bumping version to: {Colors.GREEN}{new_version}{Colors.NC}"
+    )
 
     current_version = get_current_version()
-    print(f"Current version: {Colors.YELLOW}{current_version}{Colors.NC}")
-    print(f"New version:     {Colors.GREEN}{new_version}{Colors.NC}")
-    print()
+    log.info(f"Current version: {Colors.YELLOW}{current_version}{Colors.NC}")
+    log.info(f"New version:     {Colors.GREEN}{new_version}{Colors.NC}")
+    log.info("")
 
     success = True
+    toc_path = Path("ConsumableManager.toc")
+    lua_path = Path("ConsumableManager.lua")
 
     # Update ConsumableManager.toc
-    try:
-        with open("ConsumableManager.toc", "r", encoding="utf-8") as f:
-            toc_content = f.read()
-
+    if toc_path.exists():
+        toc_content = toc_path.read_text(encoding="utf-8")
         new_toc = re.sub(
             r"^## Version:.*$",
             f"## Version: {new_version}",
@@ -91,21 +108,17 @@ def bump_version(new_version: str) -> int:
             flags=re.MULTILINE,
         )
 
-        if update_file("ConsumableManager.toc", toc_content, new_toc):
-            print(f"{Colors.GREEN}✓{Colors.NC} Updated: ConsumableManager.toc")
+        if update_file(str(toc_path), toc_content, new_toc):
+            log.info(f"{Colors.GREEN}✓{Colors.NC} Updated: {toc_path.name}")
         else:
             success = False
-    except FileNotFoundError:
-        print(f"{Colors.RED}✗{Colors.NC} File not found: ConsumableManager.toc")
-        success = False
-    except Exception as e:
-        print(f"{Colors.RED}✗{Colors.NC} Error with ConsumableManager.toc: {e}")
+    else:
+        log.error(f"{Colors.RED}✗{Colors.NC} File not found: {toc_path.name}")
         success = False
 
     # Update ConsumableManager.lua
-    try:
-        with open("ConsumableManager.lua", "r", encoding="utf-8") as f:
-            lua_content = f.read()
+    if lua_path.exists():
+        lua_content = lua_path.read_text(encoding="utf-8")
 
         # Update header comment
         new_lua = re.sub(
@@ -117,58 +130,42 @@ def bump_version(new_version: str) -> int:
 
         # Update status display version
         new_lua = re.sub(
-            r'local version = HexColor\("v[\d.]+',
-            f'local version = HexColor("v{new_version}',
+            r"v\d+\.\d+\.\d+",
+            f"v{new_version}",
             new_lua,
         )
 
-        if update_file("ConsumableManager.lua", lua_content, new_lua):
-            print(
-                f"{Colors.GREEN}✓{Colors.NC} Updated: ConsumableManager.lua (header + status)"
+        if update_file(str(lua_path), lua_content, new_lua):
+            log.info(
+                f"{Colors.GREEN}✓{Colors.NC} Updated: {lua_path.name} (header + status)"
             )
         else:
             success = False
-    except FileNotFoundError:
-        print(f"{Colors.RED}✗{Colors.NC} File not found: ConsumableManager.lua")
-        success = False
-    except Exception as e:
-        print(f"{Colors.RED}✗{Colors.NC} Error with ConsumableManager.lua: {e}")
+    else:
+        log.error(f"{Colors.RED}✗{Colors.NC} File not found: {lua_path.name}")
         success = False
 
-    # Summary
-    print()
+    log.info("")
     if success:
-        print(f"{Colors.GREEN}✓ Version bump complete!{Colors.NC}")
-
-        # Show next steps only if not in CI
-        if not (os.getenv("CI") or os.getenv("GITHUB_ACTIONS")):
-            print()
-            print("Next steps:")
-            print(f"  1. Review: {Colors.YELLOW}git diff{Colors.NC}")
-            print(
-                f"  2. Commit: {Colors.YELLOW}git add -A && git commit -m 'chore: bump version to {new_version}'{Colors.NC}"
-            )
-            print(f"  3. Tag:    {Colors.YELLOW}git tag v{new_version}{Colors.NC}")
-            print(f"  4. Push:   {Colors.YELLOW}git push && git push --tags{Colors.NC}")
-
+        log.info(f"{Colors.GREEN}✓ Version bump complete!{Colors.NC}")
         return 0
     else:
-        print(f"{Colors.RED}✗ Version bump failed!{Colors.NC}")
+        log.error(f"{Colors.RED}✗ Version bump failed!{Colors.NC}")
         return 2
 
 
 def main():
     if len(sys.argv) != 2:
-        print(f"{Colors.RED}Error: No version specified{Colors.NC}")
-        print(f"Usage: {sys.argv[0]} <new_version>")
-        print(f"Example: {sys.argv[0]} 2.9.0")
+        log.error(f"{Colors.RED}Error: No version specified{Colors.NC}")
+        log.info(f"Usage: {sys.argv[0]} <new_version>")
+        log.info(f"Example: {sys.argv[0]} 2.9.0")
         sys.exit(1)
 
     new_version = sys.argv[1]
 
     if not validate_version(new_version):
-        print(f"{Colors.RED}Error: Invalid version format{Colors.NC}")
-        print("Please use semantic versioning: X.Y.Z (e.g., 2.9.0)")
+        log.error(f"{Colors.RED}Error: Invalid version format{Colors.NC}")
+        log.info("Please use semantic versioning: X.Y.Z (e.g., 2.9.0)")
         sys.exit(1)
 
     exit_code = bump_version(new_version)
