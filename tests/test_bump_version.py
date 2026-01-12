@@ -4,7 +4,6 @@ Unit tests for bump-version.py
 """
 
 import importlib.util
-import logging
 import os
 import sys
 import tempfile
@@ -22,7 +21,6 @@ def load_bump_version(*, ci: bool = False):
     """
     module_name = "bump_version_test_instance"
 
-    # Ensure clean module state
     sys.modules.pop(module_name, None)
 
     if ci:
@@ -40,20 +38,17 @@ class BaseBumpTest(unittest.TestCase):
     """Shared environment setup for file-based tests."""
 
     def setUp(self):
-        # Silence logging unless explicitly asserted
-        logging.disable(logging.CRITICAL)
-
         self.tmp_dir = tempfile.TemporaryDirectory()
         self.test_path = Path(self.tmp_dir.name)
         self.original_cwd = Path.cwd()
         os.chdir(self.test_path)
 
         self.bump_version = load_bump_version()
+        self.logger_name = self.bump_version.log.name
 
     def tearDown(self):
         os.chdir(self.original_cwd)
         self.tmp_dir.cleanup()
-        logging.disable(logging.NOTSET)
 
     def create_mock_project(self, version="2.8.0"):
         (self.test_path / "ConsumableManager.toc").write_text(
@@ -94,15 +89,15 @@ class TestBumpLogic(BaseBumpTest):
     def test_successful_bump(self):
         self.create_mock_project("2.8.0")
 
-        with self.assertLogs(level="INFO") as logs:
+        with self.assertLogs(self.logger_name, level="INFO") as logs:
             result = self.bump_version.bump_version("2.9.0")
 
         self.assertEqual(result, 0)
 
-        combined_logs = "\n".join(logs.output)
-        self.assertIn("Version bump complete", combined_logs)
-        self.assertIn("Updated: ConsumableManager.toc", combined_logs)
-        self.assertIn("Updated: ConsumableManager.lua", combined_logs)
+        combined = "\n".join(logs.output)
+        self.assertIn("Version bump complete", combined)
+        self.assertIn("Updated: ConsumableManager.toc", combined)
+        self.assertIn("Updated: ConsumableManager.lua", combined)
 
         toc = (self.test_path / "ConsumableManager.toc").read_text()
         lua = (self.test_path / "ConsumableManager.lua").read_text()
@@ -112,14 +107,14 @@ class TestBumpLogic(BaseBumpTest):
         self.assertIn("'v2.9.0'", lua)
 
     def test_missing_files(self):
-        with self.assertLogs(level="ERROR") as logs:
+        with self.assertLogs(self.logger_name, level="ERROR") as logs:
             result = self.bump_version.bump_version("2.9.0")
 
         self.assertEqual(result, 2)
 
-        combined_logs = "\n".join(logs.output)
-        self.assertIn("File not found: ConsumableManager.toc", combined_logs)
-        self.assertIn("Version bump failed", combined_logs)
+        combined = "\n".join(logs.output)
+        self.assertIn("File not found: ConsumableManager.toc", combined)
+        self.assertIn("Version bump failed", combined)
 
 
 class TestCIEnvironment(unittest.TestCase):
